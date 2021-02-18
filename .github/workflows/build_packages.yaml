@@ -23,7 +23,7 @@ jobs:
          -v ~/.cache/electron:/root/.cache/electron \
          -v ~/.cache/electron-builder:/root/.cache/electron-builder \
          electronuserland/builder:wine \
-         bash -c "yarn && yarn electron:build-linux && yarn electron:build-win"
+         bash -c "yarn && yarn electron:build-linux && yarn electron:build-win && yarn electron:build-mac"
     - uses: actions/upload-artifact@v2
       with:
         name: dist_electron
