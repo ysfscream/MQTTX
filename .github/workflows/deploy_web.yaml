@@ -1,10 +1,6 @@
 name: deploy web
 
-on:
-  release:
-    types:
-      - published
-  workflow_dispatch:
+on: push
 
 jobs:
   deploy:
@@ -13,7 +9,7 @@ jobs:
     - name: use node.js
       uses: actions/setup-node@v1
       with:
-        node-version: 16.15
+        node-version: 16.14
     - uses: actions/checkout@v2
     - name: set env
       run: |
