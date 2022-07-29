@@ -1,6 +1,11 @@
 name: deploy web
 
-on: push
+on:
+  release:
+    types:
+      - published
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -21,6 +26,7 @@ jobs:
         cd web
         yarn && yarn build
     - name: upload dist
+      if: github.event_name != 'pull_request'
       run: |
         cd web
         wget http://gosspublic.alicdn.com/ossutil/1.7.8/ossutil64
