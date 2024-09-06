@@ -84,8 +84,21 @@ describe('sub', () => {
         const pubProcess = exec(
           `node ./bin/index.js pub -h broker.emqx.io -p 1883 -u mqttx_test_pub -t ${topic} -m "${message}"`,
         )
-        console.log('Published message with message:', message, 'to topic:', topic)
         childProcesses.push(pubProcess)
+
+        pubProcess.stdout?.on('data', (data) => {
+          console.log(`Publish process stdout: ${data}`)
+        })
+
+        pubProcess.stderr?.on('data', (data) => {
+          console.error(`Publish process stderr: ${data}`)
+        })
+
+        pubProcess.on('close', (code) => {
+          console.log(`Publish process exited with code ${code}`)
+        })
+
+        console.log('Published message with message:', message, 'to topic:', topic)
       }
 
       if (data.includes(message)) {
