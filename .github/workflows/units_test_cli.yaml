@@ -1,12 +1,9 @@
 name: units test cli
 
 on:
-  pull_request:
+  push:
     paths:
       - 'cli/**'
-  release:
-    types:
-      - published
 
 jobs:
   cli_test:
