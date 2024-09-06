@@ -2,8 +2,12 @@ name: units test cli
 
 on:
   push:
-    paths:
-      - 'cli/**'
+    branches:
+      - '*'
+  pull_request:
+    branches:
+      - '*'
+  workflow_dispatch:
 
 jobs:
   cli_test:
