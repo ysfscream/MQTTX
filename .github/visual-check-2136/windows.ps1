@@ -112,7 +112,15 @@ try {
         $closed = [NativeVisual]::CloseReleaseNotes($window.Id)
         Check 'release-note-dismissed' $true @{ closed=$closed; reason='Initial desktop retained; capture unobstructed main window' }
         Start-Sleep -Seconds 2
+        # Before its remote page loads, the release-note window is also titled
+        # MQTTX. Its handle can be returned by Process.MainWindowHandle on startup.
+        $window = Get-Process MQTTX -ErrorAction SilentlyContinue | Where-Object { $_.Path -ieq $exe -and $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -notlike '*Release Note*' -and [NativeVisual]::IsWindowVisible($_.MainWindowHandle) } | Select-Object -First 1
+        Check 'main-window-after-dismiss-visible' ([bool]$window) @{ handle=[string]$window.MainWindowHandle; title=$window.MainWindowTitle; path=$window.Path }
+        if (!$window) { throw 'No installed main window after release-note dismissal' }
+        $hwnd = $window.MainWindowHandle
+        [NativeVisual]::ShowWindow($hwnd,3) | Out-Null
         [NativeVisual]::SetForegroundWindow($hwnd) | Out-Null
+        Start-Sleep -Seconds 2
         Attempt 'full-desktop-screenshot' { [NativeVisual]::Capture("$out/windows-fullscreen.png",[IntPtr]::Zero) }
         Attempt 'main-window-screenshot' { [NativeVisual]::Capture("$out/windows-main-window.png",$hwnd) }
         Attempt 'window-icon-small' { [NativeVisual]::WindowIcon($hwnd,$true,"$out/windows-window-icon-small.png") }
