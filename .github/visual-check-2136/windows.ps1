@@ -33,8 +33,20 @@ try {
     Check 'nsis-x64-package' ($installers.Count -eq 1) @($installers.FullName)
     if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS x64 installer' }
     $installer = $installers[0].FullName
+    foreach ($size in @(16,32,48,256)) {
+        Attempt "shell-icon-installer-$size" { [NativeVisual]::ShellIcon($installer, $size, "$out/windows-installer-$size.png") }
+    }
+    $installStarted = Get-Date
     $install = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
     Check 'silent-install-exit' ($install.ExitCode -eq 0) @{ exitCode=$install.ExitCode; command="$installer /S" }
+    if ($install.ExitCode -ne 0) {
+        Start-Sleep -Seconds 5
+        Get-WinEvent -FilterHashtable @{ LogName='Application'; StartTime=$installStarted } -ErrorAction SilentlyContinue |
+            Where-Object { $_.Id -in @(1000,1001) } | Select-Object TimeCreated,Id,ProviderName,Message |
+            ConvertTo-Json -Depth 6 | Set-Content "$out/windows-installer-events.json" -Encoding UTF8
+        [NativeVisual]::Capture("$out/windows-install-failure.png",[IntPtr]::Zero) | Out-Null
+        Get-FileHash $installer | Format-List | Out-String | Set-Content "$out/windows-installer-sha256.txt"
+    }
     $desktopRoots = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('CommonDesktopDirectory')) | Select-Object -Unique
     $menuRoots = @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms')) | Select-Object -Unique
     $desktopLinks = @($desktopRoots | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter 'MQTTX.lnk' -ErrorAction SilentlyContinue })
@@ -65,7 +77,7 @@ try {
     foreach ($data in $shortcutData) {
         Check "$($data.kind)-installed-target" ($data.TargetPath -ieq $exe) $data
     }
-    $sources = [ordered]@{ installer=$installer; installed=$exe; uninstaller=$uninstaller }
+    $sources = [ordered]@{ installed=$exe; uninstaller=$uninstaller }
     if ($desktopLinks.Count) { $sources['desktop-shortcut'] = $desktopLinks[0].FullName }
     if ($menuLinks.Count) { $sources['start-menu-shortcut'] = $menuLinks[0].FullName }
     foreach ($name in $sources.Keys) {
