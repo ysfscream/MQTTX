@@ -1,0 +1,80 @@
+name: Temporary native visual check for PR 2136
+
+on:
+  push:
+    branches: [ci/visual-check-2136]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-visual:
+    if: github.repository == 'ysfscream/MQTTX' && github.ref == 'refs/heads/ci/visual-check-2136'
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      NODE_OPTIONS: --openssl-legacy-provider
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize evidence
+        run: |
+          New-Item -ItemType Directory -Force visual-results | Out-Null
+          '[{"name":"pipeline","pass":false,"detail":"Build or setup did not reach native checks; see Actions logs."}]' | Set-Content visual-results/windows-checks.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install build dependencies
+        run: yarn install --network-timeout 1000000
+      - name: Build NSIS x64 only
+        run: |
+          yarn run gen:version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          yarn vue:electron-build electron:build --win nsis --x64 --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install, inspect Shell icons, capture desktop, and uninstall
+        run: ./.github/visual-check-2136/windows.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-visual
+          path: visual-results/
+          if-no-files-found: error
+
+  linux-visual:
+    if: github.repository == 'ysfscream/MQTTX' && github.ref == 'refs/heads/ci/visual-check-2136'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 40
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize evidence
+        run: |
+          mkdir -p visual-results
+          echo '[{"name":"pipeline","pass":false,"detail":"Build or setup did not reach native checks; see Actions logs."}]' > visual-results/linux-checks.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install build dependencies
+        run: yarn install
+      - name: Build deb x64 only
+        run: |
+          yarn run gen:version
+          yarn vue:electron-build electron:build --linux deb --x64 --publish never
+      - name: Install desktop inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb openbox tint2 scrot xdotool x11-utils desktop-file-utils python3-pil dbus-x11
+      - name: Install and inspect native Linux desktop
+        run: dbus-run-session -- python3 .github/visual-check-2136/linux.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-visual
+          path: visual-results/
+          if-no-files-found: error
