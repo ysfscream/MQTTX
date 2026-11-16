@@ -47,6 +47,12 @@ try {
         [NativeVisual]::Capture("$out/windows-install-failure.png",[IntPtr]::Zero) | Out-Null
         Get-FileHash $installer | Format-List | Out-String | Set-Content "$out/windows-installer-sha256.txt"
     }
+    # Preserve the first failure verdict. Retry the identical, unmodified installer
+    # only to collect the remaining native visual/uninstall evidence (upstream #10296).
+    for ($retry = 1; $install.ExitCode -eq -1073741819 -and $retry -le 5; $retry++) {
+        $install = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
+        Check "silent-install-retry-$retry-exit" ($install.ExitCode -eq 0) @{ exitCode=$install.ExitCode; command="$installer /S"; reason='NSIS System.dll access violation; original failed check retained' }
+    }
     $desktopRoots = @([Environment]::GetFolderPath('Desktop'), [Environment]::GetFolderPath('CommonDesktopDirectory')) | Select-Object -Unique
     $menuRoots = @([Environment]::GetFolderPath('Programs'), [Environment]::GetFolderPath('CommonPrograms')) | Select-Object -Unique
     $desktopLinks = @($desktopRoots | ForEach-Object { Get-ChildItem -LiteralPath $_ -Filter 'MQTTX.lnk' -ErrorAction SilentlyContinue })
@@ -86,6 +92,8 @@ try {
         }
     }
     # The hosted runner's interactive Explorer session supplies the real desktop/taskbar.
+    $desktopShell = New-Object -ComObject Shell.Application
+    $desktopShell.MinimizeAll()
     Get-Process MQTTX -ErrorAction SilentlyContinue | Stop-Process -Force
     $app = Start-Process -FilePath $exe -WorkingDirectory $installDir -PassThru -RedirectStandardOutput "$out/windows-app-stdout.log" -RedirectStandardError "$out/windows-app-stderr.log"
     $deadline = (Get-Date).AddSeconds(60)
@@ -97,15 +105,19 @@ try {
     Check 'installed-main-window-visible' ([bool]$window) @{ launchedPath=$exe; launchedPID=$app.Id; windowPID=$window.Id; handle=[string]$window.MainWindowHandle; title=$window.MainWindowTitle }
     if ($window) {
         $hwnd = $window.MainWindowHandle
-        [NativeVisual]::ShowWindow($hwnd,9) | Out-Null
+        [NativeVisual]::ShowWindow($hwnd,3) | Out-Null
         [NativeVisual]::SetForegroundWindow($hwnd) | Out-Null
         Start-Sleep -Seconds 10
+        Attempt 'initial-desktop-screenshot' { [NativeVisual]::Capture("$out/windows-initial-desktop.png",[IntPtr]::Zero) }
+        $closed = [NativeVisual]::CloseReleaseNotes($window.Id)
+        Check 'release-note-dismissed' $true @{ closed=$closed; reason='Initial desktop retained; capture unobstructed main window' }
+        Start-Sleep -Seconds 2
+        [NativeVisual]::SetForegroundWindow($hwnd) | Out-Null
         Attempt 'full-desktop-screenshot' { [NativeVisual]::Capture("$out/windows-fullscreen.png",[IntPtr]::Zero) }
         Attempt 'main-window-screenshot' { [NativeVisual]::Capture("$out/windows-main-window.png",$hwnd) }
         Attempt 'window-icon-small' { [NativeVisual]::WindowIcon($hwnd,$true,"$out/windows-window-icon-small.png") }
         Attempt 'window-icon-big' { [NativeVisual]::WindowIcon($hwnd,$false,"$out/windows-window-icon-big.png") }
     }
-    $desktopShell = New-Object -ComObject Shell.Application
     $desktopShell.MinimizeAll()
     Start-Sleep -Seconds 4
     Attempt 'explorer-shortcut-screenshot' { [NativeVisual]::Capture("$out/windows-desktop-shortcut.png",[IntPtr]::Zero) }

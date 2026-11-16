@@ -137,6 +137,14 @@ systray_icon_size = 24
     run(['xdotool', 'windowactivate', '--sync', wid])
     run(['xdotool', 'windowmove', wid, '300', '80'])
     time.sleep(10)
+    initial = run(['scrot', str(out / 'linux-initial-desktop.png')])
+    check('initial-desktop-screenshot', initial.returncode == 0, initial.stdout)
+    notes = run(['xdotool', 'search', '--onlyvisible', '--name', 'MQTTX.*Release Note']).stdout.splitlines()
+    for note in notes:
+        run(['xdotool', 'windowclose', note])
+    check('release-note-dismissed', True, dict(windows=notes, reason='Initial desktop retained; capture unobstructed main window'))
+    time.sleep(2)
+    run(['xdotool', 'windowactivate', '--sync', wid])
     # xprop defaults to 250000 bytes, truncating a 512x512 ARGB property.
     props = run(['xprop', '-id', wid, '-len', '16777216', '-notype', '-f', '_NET_WM_ICON', '32c', '_NET_WM_ICON'])
     (out / 'linux-net-wm-icon.txt').write_text(props.stdout)

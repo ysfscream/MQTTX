@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 
 // Ask the Shell for icons, preserving the alpha channel in its HBITMAP.
@@ -29,7 +30,24 @@ public static class NativeVisual {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr window, int command);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr window);
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+    delegate bool EnumWindowCallback(IntPtr window, IntPtr param);
+    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowCallback callback, IntPtr param);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")] static extern bool PostMessage(IntPtr window, uint msg, IntPtr wparam, IntPtr lparam);
     public static void Init() { SetProcessDPIAware(); }
+    public static int CloseReleaseNotes(int processId) {
+        int count=0;
+        EnumWindows(delegate(IntPtr window, IntPtr param) {
+            uint pid; GetWindowThreadProcessId(window,out pid);
+            StringBuilder text=new StringBuilder(1024); GetWindowText(window,text,text.Capacity);
+            if (pid==processId && text.ToString().Contains("Release Note")) {
+                PostMessage(window,0x10,IntPtr.Zero,IntPtr.Zero); count++;
+            }
+            return true;
+        },IntPtr.Zero);
+        return count;
+    }
 
     public static string ShellIcon(string path, int size, string output) {
         Guid iid = typeof(IShellItemImageFactory).GUID;
