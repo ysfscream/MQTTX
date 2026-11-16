@@ -6,9 +6,9 @@ function Check($name, [bool]$pass, $detail) {
     ConvertTo-Json -InputObject @($checks.ToArray()) -Depth 12 | Set-Content "$out/windows-checks.json" -Encoding UTF8
     Write-Host "$name : $pass : $($detail | ConvertTo-Json -Compress -Depth 8)"
 }
-function Attempt($name, [scriptblock]$action) {
-    try { $detail = & $action; Check $name $true $detail }
-    catch { Check $name $false $_.ToString() }
+function Attempt($checkName, [scriptblock]$action) {
+    try { $detail = & $action; Check $checkName $true $detail }
+    catch { Check $checkName $false $_.ToString() }
 }
 function RegistryEntries {
     foreach ($root in @('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -138,7 +138,13 @@ try {
                 if (!$remainingDir -and !$remainingLinks.Count -and !$remainingRegistry.Count) { break }
                 Start-Sleep -Seconds 2
             } until ((Get-Date) -gt $deadline)
-            Check 'uninstall-directory-removed' (!$remainingDir) $installDir
+            $residue = @()
+            $remainingProcesses = @()
+            if ($remainingDir) {
+                $residue = @(Get-ChildItem -LiteralPath $installDir -Force -Recurse -ErrorAction SilentlyContinue | Select-Object FullName,Length,Mode)
+                $remainingProcesses = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$installDir\*" } | Select-Object Id,Name,Path)
+            }
+            Check 'uninstall-directory-removed' (!$remainingDir) @{ path=$installDir; residue=$residue; processes=$remainingProcesses }
             Check 'uninstall-desktop-shortcut-removed' (@($desktopLinks | Where-Object { Test-Path $_.FullName }).Count -eq 0) @($desktopLinks.FullName)
             Check 'uninstall-start-menu-shortcut-removed' (@($menuLinks | Where-Object { Test-Path $_.FullName }).Count -eq 0) @($menuLinks.FullName)
             Check 'uninstall-registry-removed' ($remainingRegistry.Count -eq 0) $remainingRegistry
